@@ -1,18 +1,18 @@
 importScripts('./version.js'); // APP_VERSION tek kaynaktan gelir
 const CACHE_NAME = 'sinav-analizi-' + APP_VERSION;
-const SCOPE = '/sinav/';
+const SCOPE = '/dfl/';
 const ASSETS = [
-  '/sinav/',
-  '/sinav/index.html',
-  '/sinav/version.js',
-  '/sinav/style.css',
-  '/sinav/app-core.js',
-  '/sinav/app-ui.js',
-  '/sinav/app-analysis.js',
-  '/sinav/app-settings.js',
-  '/sinav/manifest.json',
-  '/sinav/icon-192.png',
-  '/sinav/icon.png'
+  '/dfl/',
+  '/dfl/index.html',
+  '/dfl/version.js',
+  '/dfl/style.css',
+  '/dfl/app-core.js',
+  '/dfl/app-ui.js',
+  '/dfl/app-analysis.js',
+  '/dfl/app-settings.js',
+  '/dfl/manifest.json',
+  '/dfl/icon-192.png',
+  '/dfl/icon.png'
 ];
 
 function isFirebaseRequest(url) {
@@ -26,12 +26,12 @@ function isFirebaseRequest(url) {
 
 function isNavigationRequest(request, url) {
   return request.mode === 'navigate' ||
-    url.pathname === '/sinav/' ||
-    url.pathname === '/sinav/index.html';
+    url.pathname === '/dfl/' ||
+    url.pathname === '/dfl/index.html';
 }
 
 function isFreshAppAsset(url) {
-  // Sadece /sinav/ scope'taki dosyalar
+  // Sadece /dfl/ scope'taki dosyalar
   if (!url.pathname.startsWith(SCOPE)) return false;
   const fileName = url.pathname.split('/').pop();
   return [
@@ -88,7 +88,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
   // Scope dışındaki isteklere müdahale etme
-  if (url.origin === self.location.origin && !url.pathname.startsWith('/sinav/')) return;
+  if (url.origin === self.location.origin && !url.pathname.startsWith('/dfl/')) return;
 
   if (isFirebaseRequest(url)) {
     event.respondWith(fetch(event.request));

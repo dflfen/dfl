@@ -3,13 +3,13 @@
 Chart.register(ChartDataLabels);
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCbgwrcjkFF8yf2S2zOFzIt8w18oqmI6oQ",
-  authDomain: "fetgemfen-f9580.firebaseapp.com",
-  projectId: "fetgemfen-f9580",
-  storageBucket: "fetgemfen-f9580.firebasestorage.app",
-  messagingSenderId: "220756328676",
-  appId: "1:220756328676:web:def468b1b6a98474acecf1",
-  databaseURL: "https://fetgemfen-f9580-default-rtdb.europe-west1.firebasedatabase.app"
+  apiKey: "AIzaSyCqoZu0wG0pln8P2Ma6qM5n6GxcVHFebsE",
+  authDomain: "deneme-179b1.firebaseapp.com",
+  databaseURL: "https://deneme-179b1-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "deneme-179b1",
+  storageBucket: "deneme-179b1.firebasestorage.app",
+  messagingSenderId: "961268106674",
+  appId: "1:961268106674:web:41bf1e6160d9de1c42d0ab"
 };
 
 firebase.initializeApp(firebaseConfig);
