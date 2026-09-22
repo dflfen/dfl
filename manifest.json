@@ -1,0 +1,53 @@
+{
+  "name": "Sınav Analiz Sistemi",
+  "short_name": "Sınav Analizi",
+  "id": "/sinav/",
+  "lang": "tr",
+  "description": "Öğrenci, sınıf, ders, sınav ve risk analizleri için PWA destekli eğitim raporlama sistemi.",
+  "start_url": "/sinav/index.html",
+  "scope": "/sinav/",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#2563eb",
+  "categories": ["education", "productivity"],
+  "icons": [
+  {
+    "src": "/sinav/icon-192.png",
+    "sizes": "192x192",
+    "type": "image/png",
+    "purpose": "any"
+  },
+  {
+    "src": "/sinav/icon.png",
+    "sizes": "512x512",
+    "type": "image/png",
+    "purpose": "any"
+  }
+],
+  "shortcuts": [
+    {
+      "name": "Ana Sayfa",
+      "short_name": "Ana Sayfa",
+      "url": "/sinav/index.html#anasayfa_genel",
+      "icons": [{ "src": "/sinav/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Öğrenci Sorgula",
+      "short_name": "Öğrenci",
+      "url": "/sinav/index.html#anasayfa",
+      "icons": [{ "src": "/sinav/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Sonuçlar ve Analizler",
+      "short_name": "Analizler",
+      "url": "/sinav/index.html#sonuclar",
+      "icons": [{ "src": "/sinav/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Toplu Rapor",
+      "short_name": "Rapor",
+      "url": "/sinav/index.html#rapor",
+      "icons": [{ "src": "/sinav/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

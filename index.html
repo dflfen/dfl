@@ -1,1 +1,487 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sınav Analizi">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icon-192.png">
+<link rel="manifest" href="./manifest.json">
+<title>Sınav Analiz Sistemi</title>
+<script src="./version.js"></script>
+<script>
+window.SA_APP_VERSION = APP_VERSION;
+window.SA_CACHE_NAME = 'sinav-analizi-' + APP_VERSION;
+window.SA_CACHE_READY = (async function(){
+  try {
+    const markerKey = 'sinavAnalizi.cacheReadyVersion';
+    try {
+      if (localStorage.getItem(markerKey) === window.SA_CACHE_NAME) {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration('./').then(reg => { if (reg) reg.update(); }).catch(() => {});
+        }        return;
+      }
+    } catch (e) {}
+    if (!('caches' in window)) return;
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter(key => key.startsWith('sinav-analizi-') && key !== window.SA_CACHE_NAME)
+      .map(key => caches.delete(key)));
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration('./');
+      if (reg) reg.update();
+    }
+    try { localStorage.setItem(markerKey, window.SA_CACHE_NAME); } catch (e) {}
+  } catch (err) {
+    console.warn('Başlangıç önbelleği temizlenemedi:', err);
+  }
+})();
+</script>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/css/adminlte.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- Chart.js ve Datalabels Eklentisi -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="layout-fixed sidebar-expand-lg sidebar-mini" data-active-pane="anasayfa_genel">
+
+<div id="loader">
+  <div class="spinner-border text-light mb-3 loader-spinner"></div>
+  <div id="l-txt">Oturum kontrol ediliyor...</div>
+</div>
+
+<div id="loginScreen">
+  <div class="login-card card shadow-lg">
+    <div class="card-header text-center py-4">
+      <h3 class="mb-0 text-white"><i class="fas fa-chart-bar me-2"></i>Sınav Analizi</h3>
+      <p class="text-white-50 mb-0 mt-1 login-subtitle">Bulut Tabanlı Eğitim Platformu</p>
+    </div>
+    <div class="card-body p-4">
+      <div class="mb-3">
+        <label>E-posta</label>
+        <div class="input-group">
+          <input type="email" id="loginEmail" class="form-control" placeholder="ornek@okul.com" autocomplete="email" onkeydown="if(event.key==='Enter') document.getElementById('loginPass').focus();">
+          <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label>Şifre</label>
+        <div class="input-group">
+          <input type="password" id="loginPass" class="form-control password-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
+          <span class="input-group-text password-toggle" role="button" tabindex="0" aria-label="Şifreyi göster/gizle" onclick="togglePassword()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePassword();}">
+            <i class="fas fa-eye" id="togglePassIcon"></i>
+          </span>
+        </div>
+      </div>
+      <button id="btnLogin" onclick="login()" class="btn btn-primary w-100 btn-lg">
+        <i class="fas fa-sign-in-alt me-2"></i>Giriş Yap
+      </button>
+      <div class="text-center mt-2">
+        <a href="#" class="forgot-link" onclick="openForgotPassword(event); return false;">Şifremi unuttum</a>
+      </div>
+      <div id="loginError" class="alert mt-3 mb-0"></div>
+    </div>
+  </div>
+</div>
+
+<div id="pwaInstallPopup">
+  <div class="pwa-icon"><i class="fas fa-mobile-screen-button"></i></div>
+  <div class="pwa-text">
+    <strong>Uygulamayı Yükle</strong>
+    <span>Ana ekrana ekleyerek daha hızlı erişin</span>
+  </div>
+  <div class="pwa-actions">
+    <button class="btn-pwa-install" onclick="triggerInstall(event)"><i class="fas fa-download me-1"></i>Yükle</button>
+    <button class="btn-pwa-close" onclick="closePwaPopup()" title="Kapat"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="pwa-progress"></div>
+</div>
+
+<div id="cardExplanationSheet" class="offcanvas offcanvas-bottom card-explanation-sheet no-print" tabindex="-1" aria-labelledby="cardExplanationSheetTitle">
+  <div class="card-explanation-sheet-handle" aria-hidden="true"></div>
+  <div class="offcanvas-header card-explanation-sheet-head">
+    <div class="card-explanation-sheet-title-group">
+      <div>
+        <div class="card-explanation-badge" id="cardExplanationSheetBadge"></div>
+        <h5 class="offcanvas-title" id="cardExplanationSheetTitle">Açıklama</h5>
+      </div>
+    </div>
+    <button type="button" class="btn-close card-explanation-sheet-close" data-bs-dismiss="offcanvas" aria-label="Kapat"></button>
+  </div>
+  <div class="offcanvas-body card-explanation-body" id="cardExplanationSheetBody"></div>
+</div>
+
+<div id="mainApp" class="app-wrapper" style="display:none;">
+  <nav class="app-header navbar navbar-expand bg-body sa-topbar" id="topNav">
+    <ul class="navbar-nav">
+      <li class="nav-item"><a class="nav-link top-icon-link" data-lte-toggle="sidebar" href="#" role="button" onclick="event.preventDefault()" aria-label="Menüyü aç/kapat"><i class="fas fa-bars"></i></a></li>
+      <li class="nav-item d-none d-md-inline-block">
+        <span class="nav-link top-user-email"><i class="fas fa-user-circle"></i><span id="userEmail"></span></span>
+      </li>
+      <li class="nav-item d-flex d-lg-none align-items-center ms-1">
+        <a href="#anasayfa_genel" class="top-mobile-brand" onclick="return sTab('anasayfa_genel',this)" aria-label="Ana Sayfa">
+          <img src="./icon.png" alt="" class="top-mobile-brand-icon"><span>Sınav Analizi</span>
+        </a>
+      </li>
+    </ul>
+    <ul class="navbar-nav ms-auto">
+      <li class="nav-item" id="installBtnWrapper" style="display:none;">
+        <a href="#" class="nav-link top-action-link text-success" id="installBtn" onclick="triggerInstall(event); return false;" title="Uygulamayı Yükle">
+          <i class="fas fa-download me-1"></i><span class="d-none d-sm-inline">Yükle</span>
+        </a>
+      </li>
+      <li class="nav-item"><span id="connBadge" class="nav-link conn-badge is-pending" title="Bağlantı durumu"><span id="connDot" class="conn-dot" aria-hidden="true"></span><span id="connTxt">Bağlanıyor...</span></span></li>
+      <li class="nav-item"><a href="#" class="nav-link top-action-link logout-link" onclick="logout(); return false;" title="Çıkış"><i class="fas fa-sign-out-alt"></i><span>Çıkış</span></a></li>
+    </ul>
+  </nav>
+
+  <aside class="app-sidebar bg-body-secondary shadow sa-sidebar" data-bs-theme="light" data-enable-persistence="true">
+    <div class="sidebar-brand">
+      <a href="#anasayfa_genel" class="brand-link" onclick="return sTab('anasayfa_genel',this)">
+        <img src="./icon.png" alt="" class="brand-image">
+        <span class="brand-text fw-bold">Sınav Analizi</span>
+      </a>
+    </div>
+    <div class="sidebar-wrapper">
+      <nav class="mt-2">
+        <ul class="nav sidebar-menu flex-column" role="menu">
+          <li class="nav-item"><a id="nav-anasayfa_genel" href="#anasayfa_genel" class="nav-link active" onclick="return sTab('anasayfa_genel',this)"><i class="nav-icon fas fa-home"></i><p>Ana Sayfa</p></a></li>
+          <li class="nav-item"><a id="nav-anasayfa" href="#anasayfa" class="nav-link" onclick="return sTab('anasayfa',this)"><i class="nav-icon fas fa-user-graduate"></i><p>Öğrenci</p></a></li>
+          <li class="nav-item"><a id="nav-sonuclar" href="#sonuclar" class="nav-link" onclick="return sTab('sonuclar',this)"><i class="nav-icon fas fa-chart-line"></i><p>Sonuçlar &amp; Analizler</p></a></li>
+          <li class="nav-item"><a id="nav-rapor" href="#rapor" class="nav-link" onclick="return sTab('rapor',this)"><i class="nav-icon fas fa-file-alt"></i><p>Toplu Rapor</p></a></li>
+          <li id="nav-ayarlar" class="nav-item admin-only"><a href="#ayarlar" class="nav-link" onclick="return sTab('ayarlar',this)"><i class="nav-icon fas fa-cog"></i><p>Ayarlar</p></a></li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="app-main">
+    <div class="app-content">
+      <div class="container-fluid">
+        
+        <div id="anasayfa_genel" class="pane active-pane">
+          <div class="row mb-3 home-shortcuts-row">
+            <div class="col-md-3 col-sm-6 col-12"><div class="home-nav-card home-nav-primary" role="button" tabindex="0" onclick="sTab('anasayfa', document.getElementById('nav-anasayfa'))" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sTab('anasayfa', document.getElementById('nav-anasayfa'));}"><span class="home-nav-icon"><i class="fas fa-user-graduate"></i></span><div class="home-nav-content"><span class="home-nav-title">Öğrenci Profili</span><span class="home-nav-desc">Kişisel karneler</span></div></div></div>
+            <div class="col-md-3 col-sm-6 col-12"><div class="home-nav-card home-nav-success" role="button" tabindex="0" onclick="sTab('sonuclar', document.getElementById('nav-sonuclar'))" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sTab('sonuclar', document.getElementById('nav-sonuclar'));}"><span class="home-nav-icon"><i class="fas fa-chart-line"></i></span><div class="home-nav-content"><span class="home-nav-title">Sonuçlar & Analizler</span><span class="home-nav-desc">Sınıf/Ders analizleri</span></div></div></div>
+            <div class="col-md-3 col-sm-6 col-12"><div class="home-nav-card home-nav-info" role="button" tabindex="0" onclick="sTab('rapor', document.getElementById('nav-rapor'))" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sTab('rapor', document.getElementById('nav-rapor'));}"><span class="home-nav-icon"><i class="fas fa-file-alt"></i></span><div class="home-nav-content"><span class="home-nav-title">Toplu Rapor</span><span class="home-nav-desc">Sınıf karneleri yazdır</span></div></div></div>
+            <div class="col-md-3 col-sm-6 col-12 admin-only"><div class="home-nav-card home-nav-warning" role="button" tabindex="0" onclick="sTab('ayarlar', document.getElementById('nav-ayarlar'))" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sTab('ayarlar', document.getElementById('nav-ayarlar'));}"><span class="home-nav-icon"><i class="fas fa-cog"></i></span><div class="home-nav-content"><span class="home-nav-title">Ayarlar & Yükleme</span><span class="home-nav-desc">Excel ile veri aktarımı</span></div></div></div>
+          </div>
+          <div class="card sa-panel sa-panel-info"><div class="card-header"><h3 class="card-title"><i class="fas fa-tachometer-alt me-2"></i>Sistem Özeti</h3></div><div class="card-body"><div class="row" id="dynamicStatsGrid"></div></div></div>
+        </div>
+
+        <div id="anasayfa" class="pane">
+          <div class="card sa-panel sa-panel-primary"><div class="card-header"><h3 class="card-title"><i class="fas fa-search me-2"></i>Öğrenci Sorgula</h3></div><div class="card-body"><div id="aBadge" class="mb-2"></div><div id="sSearchWrapper" class="search-wrapper"><div class="input-group"><input type="text" id="sInp" class="form-control" placeholder="Ad, soyad veya numara..." onkeyup="debounceSearch()" autocomplete="off"><button class="btn btn-outline-secondary btn-search-clear" onclick="clrS()"><i class="fas fa-times"></i></button></div><div id="sRes" role="listbox"></div></div></div></div>
+          <div id="homeArea"></div>
+        </div>
+
+        <div id="sonuclar" class="pane">
+          <div class="card sa-panel sa-panel-primary analysis-filter-card" id="anlFilterCard">
+            <div class="card-header d-flex align-items-center gap-2">
+              <h3 class="card-title mb-0"><i class="fas fa-filter me-2"></i>Analiz Filtreleri</h3>
+              <button type="button" class="btn btn-sm btn-outline-secondary ms-auto filter-reset-header" onclick="resetAnalysisFilters()" title="Filtreleri sıfırla" aria-label="Filtreleri sıfırla">
+                <i class="fas fa-rotate-left"></i><span class="d-none d-md-inline ms-1">Sıfırla</span>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary d-md-none filter-collapse-toggle" data-bs-toggle="collapse" data-bs-target="#anlFilterBody" aria-expanded="true" aria-controls="anlFilterBody" title="Filtreleri aç/kapat">
+                <i class="fas fa-sliders-h"></i>
+              </button>
+            </div>
+            <div id="filterSummary" class="filter-summary no-print" aria-live="polite"></div>
+            <div id="anlFilterBody" class="collapse show">
+              <div class="card-body">
+                <div class="row" id="anlFilterRow">
+            <div class="col-sm-6 col-md-4 col-lg-2"><div class="mb-3"><label>Analiz Türü</label><select id="aType" class="form-select" onchange="reqUI()"><option value="student">Öğrenci Analizi</option><option value="class">Sınıf Analizi</option><option value="subject">Ders Analizi</option><option value="examdetail">Sınav Analizi</option><option value="risk">Risk Analizi</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-3" id="gStu"><div class="mb-3"><label>Öğrenci Seçin</label><div id="anlStuSearchWrapper"><div class="input-group"><input type="text" id="anlStuInp" class="form-control" placeholder="Ad, soyad veya numara..." onkeyup="anlStuDoSearch()" autocomplete="off"><button class="btn btn-outline-secondary btn-search-clear" onclick="anlStuClear()"><i class="fas fa-times"></i></button></div><div id="anlStuRes" role="listbox"></div></div><div id="anlStuBadge"></div></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gLvl" style="display:none;"><div class="mb-3"><label>Sınıf Seviyesi</label><select id="aLvl" class="form-select" onchange="onLvlChange()"><option value="" disabled selected>Sınıf Seviyesi Seç</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gBr" style="display:none;"><div class="mb-3"><label>Şube</label><select id="aBr" class="form-select" onchange="onBrChange()"><option value="" disabled selected>Şube Seç</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gEx"><div class="mb-3"><label>Sınav Türü</label><div class="aex-wrap"><select id="aEx" class="form-select" onchange="onExTypeChange()"><option value="" disabled selected>Sınav Türü Seçiniz</option></select><span id="aExBadge" class="aex-badge" aria-hidden="true"></span></div></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gExDate" style="display:none;"><div class="mb-3"><label>Sınav Seç</label><select id="aExDate" class="form-select" onchange="onExDateStudentChange()"><option value="" disabled selected>Sınav Seçiniz</option><option value="__ALL__">Tüm Sınavlar</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gDate" style="display:none;"><div class="mb-3"><label id="lblDate">Sınav Seç</label><select id="aDate" class="form-select" onchange="onDateChange()"><option value="" disabled selected>Sınav Seç</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gSub" style="display:none;"><div class="mb-3"><label id="lblSub">Veri</label><select id="aSub" class="form-select" onchange="handleSubChange()"></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gRiskGrade" style="display:none;"><div class="mb-3"><label>Sınıf Seviyesi</label><select id="riskGradeFilter" class="form-select" onchange="onRiskFilterChange(true)"><option value="">Tüm Sınıflar</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gRiskBranch" style="display:none;"><div class="mb-3"><label>Şube</label><select id="riskBranchFilter" class="form-select" onchange="onRiskFilterChange(false)"><option value="">Tüm Şubeler</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gRiskExType" style="display:none;"><div class="mb-3"><label>Sınav Türü</label><select id="riskExTypeFilter" class="form-select" onchange="onRiskFilterChange(false)"><option value="">Tüm Sınav Türleri</option></select></div></div>
+            <div class="col-sm-6 col-md-4 col-lg-2" id="gRiskLevel" style="display:none;"><div class="mb-3"><label>Risk Türü</label><select id="riskLevelFilter" class="form-select" onchange="onRiskFilterChange(false)"><option value="">Tüm Riskler</option><option value="high">Yüksek Risk</option><option value="med">Orta Risk</option><option value="low">Düşük Risk</option></select></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="anlRes"></div>
+          <div id="riskPanel" style="display:none;">
+            <div class="card risk-panel-card">
+              <div class="card-header risk-panel-card-header">
+                <div class="risk-panel-header">
+                  <h6><i class="fas fa-shield-alt risk-panel-icon"></i>Risk Analizi <span id="riskTotalBadge"></span></h6>
+                </div>
+              </div>
+              <div class="card-body risk-panel-body">
+                <div class="risk-note no-print"><i class="fas fa-circle-info me-1"></i>Risk puanı karar destek göstergesidir; öğrenci hakkında tek başına kesin yargı üretmez.</div>
+                <div class="row mb-3" id="riskStatCards">
+                  <div class="col-6 col-md-3 mb-2"><div class="risk-stat-card risk-stat-high" role="button" tabindex="0" onclick="setRiskLevel('high')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRiskLevel('high')}"><span class="risk-stat-icon"><i class="fas fa-exclamation-circle"></i></span><div class="risk-stat-content"><span class="risk-stat-label">Yüksek Risk</span><span class="risk-stat-number" id="riskCardHigh">0</span></div></div></div>
+                  <div class="col-6 col-md-3 mb-2"><div class="risk-stat-card risk-stat-med" role="button" tabindex="0" onclick="setRiskLevel('med')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRiskLevel('med')}"><span class="risk-stat-icon"><i class="fas fa-exclamation-triangle"></i></span><div class="risk-stat-content"><span class="risk-stat-label">Orta Risk</span><span class="risk-stat-number" id="riskCardMed">0</span></div></div></div>
+                  <div class="col-6 col-md-3 mb-2"><div class="risk-stat-card risk-stat-low" role="button" tabindex="0" onclick="setRiskLevel('low')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRiskLevel('low')}"><span class="risk-stat-icon"><i class="fas fa-info-circle"></i></span><div class="risk-stat-content"><span class="risk-stat-label">Düşük Risk</span><span class="risk-stat-number" id="riskCardLow">0</span></div></div></div>
+                  <div class="col-6 col-md-3 mb-2"><div class="risk-stat-card risk-stat-total" role="button" tabindex="0" onclick="setRiskLevel('')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRiskLevel('')}"><span class="risk-stat-icon"><i class="fas fa-users"></i></span><div class="risk-stat-content"><span class="risk-stat-label">Toplam Risk</span><span class="risk-stat-number" id="riskCardTotal">0</span></div></div></div>
+                </div>
+                <div class="risk-list-wrap" id="riskList" role="list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="rapor" class="pane">
+          <div class="card sa-panel sa-panel-primary"><div class="card-header d-flex align-items-center justify-content-between"><h3 class="card-title"><i class="fas fa-file-alt me-2"></i>Toplu Rapor & Liste</h3><button type="button" class="btn btn-sm btn-outline-secondary ms-auto filter-reset-header" onclick="resetRapor()" title="Filtreleri sıfırla" aria-label="Filtreleri sıfırla"><i class="fas fa-rotate-left"></i><span class="d-none d-md-inline ms-1">Sıfırla</span></button></div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-sm-6 col-md-3"><div class="mb-3"><label>Sınıf Seviyesi</label><select id="rLvl" class="form-select" onchange="raporFillBranches()"><option value="">Seçiniz</option></select></div></div>
+                <div class="col-sm-6 col-md-2"><div class="mb-3"><label>Şube</label><select id="rBr" class="form-select" onchange="raporFillExamTypes()"><option value="">Tümü</option></select></div></div>
+                <div class="col-sm-6 col-md-3"><div class="mb-3"><label>Sınav Türü</label><select id="rExType" class="form-select" onchange="raporExamTypeChanged()"><option value="" disabled selected>Sınav Seçiniz</option></select></div></div>
+                <div class="col-sm-6 col-md-3"><div class="mb-3"><label>Rapor Türü</label><select id="rReportType" class="form-select" onchange="generateRapor()"><option value="" disabled selected>Rapor Türü Seçiniz</option><option value="Karne">Karne (Öğrenci Bazlı)</option><option value="Liste">Liste (Toplu Netler)</option></select></div></div>
+              </div>
+            </div>
+          </div>
+          <div id="raporRes"></div>
+        </div>
+
+        <div id="ayarlar" class="pane">
+          <div class="row">
+            <div class="col-lg-12">
+              <div class="card sa-panel sa-panel-primary">
+                <div class="card-header d-flex justify-content-between align-items-center"><h3 class="card-title"><i class="fas fa-users me-2"></i>Öğrenci Yönetimi</h3><button class="btn btn-success btn-sm ms-auto" onclick="oModAdd()"><i class="fas fa-plus me-1"></i>Ekle</button></div>
+                <div class="card-body">
+                  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 settings-toolbar">
+                    <div class="btn-group"><button class="btn btn-primary btn-sm" onclick="getEl('fStu').click()"><i class="fas fa-upload me-1"></i>Excelden Yükle</button><input type="file" id="fStu" style="display:none;" onchange="upl(event,'s')" accept=".xlsx,.xls"></div>
+                    <div class="input-group input-group-sm settings-search"><input type="text" id="setStuSearch" class="form-control" placeholder="İsim veya No ile ara..." onkeyup="filterSettingsStudents()"><span class="input-group-text"><i class="fas fa-search"></i></span></div>
+                  </div>
+                  <div class="table-responsive sa-table-scroll-sm"><table class="table table-sm table-hover text-nowrap" id="tStu"><thead><tr><th>#</th><th>No</th><th>Ad Soyad</th><th>Sınıf</th><th>İşlem</th></tr></thead><tbody></tbody></table></div>
+                  <button class="btn btn-danger w-100 mt-2 admin-only" onclick="cDel('allStudents','Tüm veriler silinecek. Onaylıyor musunuz?')"><i class="fas fa-trash me-1"></i>Tümünü Sil</button>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-12"><div class="card sa-panel sa-panel-warning"><div class="card-header"><h3 class="card-title"><i class="fas fa-file-excel me-2"></i>Sınav Verileri</h3></div><div class="card-body"><button class="btn btn-primary btn-sm mb-3" onclick="getEl('fEx').click()"><i class="fas fa-magic me-1"></i>Sonuç Yükle (Sihirbaz)</button><input type="file" id="fEx" style="display:none;" onchange="upl(event,'e')" accept=".xlsx,.xls"><div id="tExA" class="table-responsive"></div></div></div></div>
+            <div class="col-lg-12 admin-only">
+              <div class="card sys-mgmt-card"><div class="card-header"><h3 class="card-title"><i class="fas fa-database"></i>Sistem Yönetimi</h3></div><div class="card-body"><div class="sys-mgmt-inner"><div class="sys-mgmt-section"><button class="sys-mgmt-tile tile-export" onclick="expDB()"><span class="tile-icon"><i class="fas fa-cloud-download-alt"></i></span><span class="tile-text"><strong>Yedeği İndir</strong></span></button><button class="sys-mgmt-tile tile-import" onclick="getEl('fImp').click()"><span class="tile-icon"><i class="fas fa-cloud-upload-alt"></i></span><span class="tile-text"><strong>Yedekten Geri Yükle</strong></span></button><input type="file" id="fImp" style="display:none;" accept=".json" onchange="impDB(event)"></div><div class="sys-mgmt-divider"></div><div class="sys-mgmt-danger"><span class="danger-icon"><i class="fas fa-exclamation-triangle"></i></span><span class="danger-text"><strong>Sıfırla</strong></span><button class="btn-danger-modern" onclick="cDel('all','Tüm Veritabanı Silinecek!')">Sıfırla</button></div></div></div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+  <footer class="app-footer text-center sa-footer">© 2026 AYUSTASI</footer>
+
+  <!-- BOTTOM NAV BAR (mobil navigasyon) -->
+  <nav id="bottomNav" class="bottom-nav" aria-label="Alt navigasyon">
+  <a href="#anasayfa_genel" class="bnav-item" id="bnav-anasayfa_genel" onclick="return sTab('anasayfa_genel',this)" aria-label="Ana Sayfa">
+    <i class="fas fa-home bnav-icon"></i>
+    <span class="bnav-label">Ana Sayfa</span>
+  </a>
+  <a href="#anasayfa" class="bnav-item" id="bnav-anasayfa" onclick="return sTab('anasayfa',this)" aria-label="Öğrenci">
+    <i class="fas fa-user-graduate bnav-icon"></i>
+    <span class="bnav-label">Öğrenci</span>
+  </a>
+  <a href="#sonuclar" class="bnav-item" id="bnav-sonuclar" onclick="return sTab('sonuclar',this)" aria-label="Analizler">
+    <i class="fas fa-chart-line bnav-icon"></i>
+    <span class="bnav-label">Analizler</span>
+  </a>
+  <a href="#rapor" class="bnav-item" id="bnav-rapor" onclick="return sTab('rapor',this)" aria-label="Rapor">
+    <i class="fas fa-file-alt bnav-icon"></i>
+    <span class="bnav-label">Rapor</span>
+  </a>
+  <a href="#ayarlar" class="bnav-item admin-only" id="bnav-ayarlar" onclick="return sTab('ayarlar',this)" aria-label="Ayarlar">
+    <i class="fas fa-cog bnav-icon"></i>
+    <span class="bnav-label">Ayarlar</span>
+  </a>
+</nav>
+</div>
+
+<div id="toastContainer"></div>
+
+<!-- MODALLAR (Bootstrap 5 native) -->
+<div class="modal fade" id="mForgot" tabindex="-1" aria-labelledby="mForgotTitle" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-primary">
+        <h5 class="modal-title" id="mForgotTitle">Şifre Sıfırlama</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <label for="forgotEmail" class="form-label">E-posta</label>
+        <input type="email" id="forgotEmail" class="form-control" placeholder="E-posta" autocomplete="email">
+        <div id="forgotMsg" class="mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="sendPasswordReset()">Gönder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mMappings" tabindex="-1" aria-labelledby="mMappingsTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-primary">
+        <h5 class="modal-title" id="mMappingsTitle">Sihirbaz</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="cancelUpload()" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body" id="mMappingsBody"></div>
+      <div class="modal-footer" id="mMappingsFooter"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mUploadPreview" tabindex="-1" aria-labelledby="mUploadPreviewTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-info">
+        <h5 class="modal-title" id="mUploadPreviewTitle">Ön İzleme</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="cancelUpload()" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body" id="uploadPreviewBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="backToMapping()">Geri</button>
+        <button type="button" id="btnConfirmUpload" class="btn btn-success ms-auto" onclick="confirmUpload()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mEditExam" tabindex="-1" aria-labelledby="mEditExamTitle" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-warning">
+        <h5 class="modal-title" id="mEditExamTitle">Sınav Düzenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="eExBatchId">
+        <div class="mb-3">
+          <label for="eExDate" class="form-label">Tarih</label>
+          <input type="text" id="eExDate" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="eExType" class="form-label">Tür</label>
+          <input type="text" id="eExType" class="form-control">
+        </div>
+        <div class="mb-0">
+          <label for="eExPub" class="form-label">Yayınevi</label>
+          <input type="text" id="eExPub" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-warning btn-sm" onclick="svExam()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mConf" tabindex="-1" aria-labelledby="mConfTitle" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-danger">
+        <h5 class="modal-title" id="mConfTitle">Dikkat!</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <p id="cTxt" class="mb-0"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+        <button type="button" class="btn btn-danger btn-sm" id="mConfOkBtn" onclick="xDel()">Evet, Sil</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mStu" tabindex="-1" aria-labelledby="mSTit" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header sa-modal-header sa-modal-primary">
+        <h5 class="modal-title" id="mSTit">Öğrenci</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="mSNo" class="form-label">No</label>
+          <input type="text" id="mSNo" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="mSNa" class="form-label">Ad</label>
+          <input type="text" id="mSNa" class="form-control">
+        </div>
+        <div class="mb-0">
+          <label for="mSCl" class="form-label">Sınıf</label>
+          <input type="text" id="mSCl" class="form-control">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+        <button type="button" class="btn btn-success" onclick="svStu()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@4.0.0-rc7/dist/js/adminlte.min.js"></script>
+
+<script>
+(async function loadAppScripts(){
+  const version = window.SA_APP_VERSION;
+  const scripts = ['app-core.js','app-ui.js','app-analysis.js','app-settings.js'];
+  const refreshLocalStyle = () => {
+    const current = document.querySelector('link[href*="style.css"]');
+    if (!current) return;
+    const fresh = current.cloneNode();
+    fresh.href = `./style.css?v=${version}&t=${Date.now()}`;
+    fresh.onload = () => current.remove();
+    document.head.appendChild(fresh);
+  };
+  const loadScript = src => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `./${src}?v=${version}`;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(src + ' yüklenemedi'));
+    document.body.appendChild(s);
+  });
+  try {
+    if (window.SA_CACHE_READY) await window.SA_CACHE_READY;
+    refreshLocalStyle();
+    for (const src of scripts) await loadScript(src);
+  } catch (err) {
+    console.error('Uygulama başlatılamadı:', err);
+    const loader = document.getElementById('loader');
+    const text = document.getElementById('l-txt');
+    document.body.classList.add('auth-pending');
+    if (text) text.textContent = 'Uygulama dosyaları yüklenemedi. Lütfen sayfayı yenileyin.';
+    if (loader) loader.style.display = 'flex';
+  }
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('/sinav/sw.js?v=' + (window.SA_APP_VERSION || 'dev'), { scope: '/sinav/', updateViaCache: 'none' }).catch(() => {});
+}
+</script>
+
+</body>
+</html>
